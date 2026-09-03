@@ -55,7 +55,7 @@ ICFlowNet implementation remains under `src/`:
 
 ```text
 icflownet_artifact/
-├── AE_scripts/                 # preflight, E2/E3 runners, and verifiers
+├── AE_scripts/                 # E1--E3 runners, preflight, and verifiers
 ├── scripts/                    # clean-test evaluators and static-GT pipeline
 ├── src/                        # complete model, training, GT, and graph source
 ├── environment.yml            # host training/evaluation environment
@@ -121,31 +121,16 @@ conda env create --name icflownet-ae --file environment.yml
 conda activate icflownet-ae
 ```
 
-Select an available Docker command, pull the E1 image, and check that its
-experiment runner is present:
+Run the provided host wrapper to select direct Docker or `sudo docker`, pull
+the E1 image, and check that its experiment runner is present:
 
 ```bash
-export IMG=ghcr.io/ryan-hub-bit/icflow-dynamic-collection:e1
-
-if docker info >/dev/null 2>&1; then
-  DOCKER=(docker)
-else
-  DOCKER=(sudo docker)
-fi
-
-"${DOCKER[@]}" info >/dev/null
-"${DOCKER[@]}" pull "$IMG"
-
-"${DOCKER[@]}" run --rm "$IMG" bash -lc '
-test -f /opt/icflownet-e1/run_e1.sh &&
-echo "E1 container PASS"
-'
+bash "$AE_SCRIPTS/run_e1_host.sh" --check-only
 ```
 
-The commands use ordinary Docker when the current user can access the daemon;
-otherwise, they use `sudo docker`, which may prompt for a password. If neither
-method is authorized, ask the host administrator for Docker access before
-running E1.
+The wrapper uses ordinary Docker, passwordless `sudo`, or interactive `sudo`,
+in that order. If none is authorized, it prints a prerequisite error instead
+of attempting the experiment.
 
 Expected output:
 
@@ -185,15 +170,7 @@ E1 runs entirely in the Docker image pulled during setup. It does not use the
 host Conda environment or require a GPU. Run:
 
 ```bash
-"${DOCKER[@]}" rm -f icflownet-e1 >/dev/null 2>&1 || true
-
-"${DOCKER[@]}" run --name icflownet-e1 --init \
-  --cap-add=SYS_PTRACE \
-  --security-opt seccomp=unconfined \
-  "$IMG" \
-  /opt/icflownet-e1/run_e1.sh \
-  --sample zydis \
-  --output /output/zydis
+bash "$AE_SCRIPTS/run_e1_host.sh"
 ```
 
 The published Linux/amd64 image manifest used for the artifact is pinned by
@@ -223,12 +200,10 @@ E1 PASS: Zydis static GT, dynamic GT, and stripped-binary heterogeneous ACFG ver
 Any compilation, package-test, ground-truth coverage, stripping, graph-shape,
 or verification failure causes a nonzero exit status.
 
-Collect the evidence and remove the stopped container:
+The wrapper collects the evidence, removes the stopped container, and checks
+the verification report automatically. Inspect the report with:
 
 ```bash
-mkdir -p "$OUTPUT_ROOT"
-"${DOCKER[@]}" cp icflownet-e1:/output/zydis "$OUTPUT_ROOT/e1"
-"${DOCKER[@]}" rm icflownet-e1
 cat "$OUTPUT_ROOT/e1/verification.json"
 ```
 
