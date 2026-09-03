@@ -76,16 +76,25 @@ and `tailcall`.
 Clone the artifact branch and extract the AE package:
 
 ```bash
-git clone git@github.com:Ryan-hub-bit/icflownet_artifact.git
-cd icflownet
+git clone \
+  https://github.com/Ryan-hub-bit/icflownet_artifact.git
 
-mkdir -p /path/to/icflownet-ae
-tar -xzf /path/to/icflownet-ae.tar.gz -C /path/to/icflownet-ae
+cd icflownet_artifact
 
 export REPO_ROOT="$PWD"
-export DATA_ROOT=/path/to/icflownet-ae
 export OUTPUT_ROOT="$REPO_ROOT/outputs"
 export AE_SCRIPTS="$REPO_ROOT/AE_scripts"
+
+mkdir -p "$REPO_ROOT/ae_data" "$OUTPUT_ROOT"
+
+wget -O icflownet-ae.tar.gz \
+  "https://zenodo.org/records/22262200/files/icflownet-ae.tar.gz?download=1"
+
+tar --strip-components=1 \
+  -xzf icflownet-ae.tar.gz \
+  -C "$REPO_ROOT/ae_data"
+
+export DATA_ROOT="$REPO_ROOT/ae_data"
 ```
 
 If the archive contains one enclosing `icflownet-ae/` directory, set
