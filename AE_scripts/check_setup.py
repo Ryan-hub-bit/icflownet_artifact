@@ -13,11 +13,20 @@ EXPECTED_SHA256 = {
     "model/ic_nohub_model.pt": "08692bc76cd95222b2623900e06ffb46cace99c4ebb786b246887e7c6fad2de2",
     "model/mtl_model.pt": "40fb028de83182baed606e047f9088682b48ee4a083dfd77082f7fcd5e5a8ebb",
     "cleantest/binary_graph_mapping.jsonl": "47724e616d4b1226eee89fe1020650f83846542aa8ea5f388335112927c6771f",
-    "train_sample/manifest.jsonl": "bddb98ecedf91f9d9d09f085568f0aee3c55e51e46fae6e0ceb1efb18b7fa04b",
+    "train_sample/bintoindex.json": "3414463cb1ee29084c80fd22a11e2e1fa9232cd7c0b1f1e3bb01e64761e7daf3",
+    "train_sample/indextobin.json": "53f8ecd66f93e0018cf61fb325820d5cc9060eeb9b2b37692d4d5bd83ffad7c2",
+    "train_sample/indextograph.json": "8965aa91a58c23df9a7a5224da40688f904a7b5ce1530a00aa8e6de3c2fb9703",
+    "train_sample/indextores.json": "0ecd5c77460a84585c8ad719d461aadd7481b08dede5857533699cc3ec91e581",
 }
 EXPECTED_CLEAN_RECORDS = 185
 EXPECTED_TRAIN_RECORDS = 20
 TASKS = ("ret", "jumptable", "indirectcall", "tailcall")
+TRAIN_GT_SUFFIXES = {
+    "ret": "_ret.json",
+    "jumptable": "_correctjumptable.json",
+    "indirectcall": "_icallbbtocallee.json",
+    "tailcall": "_itcbbtofunc.json",
+}
 
 
 def fail(message):
@@ -41,6 +50,16 @@ def read_jsonl(path):
             except json.JSONDecodeError as error:
                 fail(f"invalid JSON at {path}:{line_number}: {error}")
     return rows
+
+
+def read_json(path):
+    try:
+        with path.open(encoding="utf-8") as handle:
+            return json.load(handle)
+    except OSError as error:
+        fail(f"cannot read {path}: {error}")
+    except json.JSONDecodeError as error:
+        fail(f"invalid JSON at {path}: {error}")
 
 
 def sha256(path):
@@ -97,16 +116,8 @@ def validate_checkpoint(torch, path, expected_hubs, expected_task):
 def validate_package(torch, data_root, check_hashes):
     require(data_root.is_dir(), f"data root does not exist: {data_root}")
 
-    required_indexes = (
-        "bintoindex.json",
-        "indextobin.json",
-        "indextograph.json",
-        "indextores.json",
-    )
     for relative in EXPECTED_SHA256:
         require((data_root / relative).is_file(), f"missing {data_root / relative}")
-    for filename in required_indexes:
-        require((data_root / "train_sample" / filename).is_file(), f"missing train_sample/{filename}")
 
     if check_hashes:
         for relative, expected in EXPECTED_SHA256.items():
@@ -139,21 +150,52 @@ def validate_package(torch, data_root, check_hashes):
         )
 
     sample_root = data_root / "train_sample"
-    sample_rows = read_jsonl(sample_root / "manifest.jsonl")
+    bintoindex = read_json(sample_root / "bintoindex.json")
+    indextobin = read_json(sample_root / "indextobin.json")
+    indextograph = read_json(sample_root / "indextograph.json")
+    indextores = read_json(sample_root / "indextores.json")
+    for name, mapping in (
+        ("bintoindex", bintoindex),
+        ("indextobin", indextobin),
+        ("indextograph", indextograph),
+        ("indextores", indextores),
+    ):
+        require(isinstance(mapping, dict), f"train_sample/{name}.json is not an object")
+
+    sample_ids = {str(index) for index in bintoindex.values()}
     require(
-        len(sample_rows) == EXPECTED_TRAIN_RECORDS,
-        f"expected {EXPECTED_TRAIN_RECORDS} training records, found {len(sample_rows)}",
+        len(sample_ids) == EXPECTED_TRAIN_RECORDS,
+        f"expected {EXPECTED_TRAIN_RECORDS} training records, found {len(sample_ids)}",
     )
+    for name, mapping in (
+        ("indextobin", indextobin),
+        ("indextograph", indextograph),
+        ("indextores", indextores),
+    ):
+        require(set(mapping) == sample_ids, f"train_sample/{name}.json has inconsistent indexes")
+
     task_coverage = Counter()
-    for row in sample_rows:
-        alias = row.get("alias", "<unknown>")
-        for key in ("binary", "graph"):
-            relative = row.get(key)
-            require(relative and (sample_root / relative).is_file(), f"missing sample {key} for {alias}")
-        resources = row.get("resources")
-        require(resources and (sample_root / resources).is_dir(), f"missing sample resources for {alias}")
-        for task in TASKS:
-            if row.get("tasks", {}).get(task, {}).get("has_valid_pair"):
+    for binary, index in bintoindex.items():
+        index = str(index)
+        require(indextobin[index] == binary, f"inconsistent binary mapping for index {index}")
+        require(
+            (sample_root / indextograph[index]).is_file(),
+            f"missing sample graph for index {index}",
+        )
+        resource_root = sample_root / indextores[index]
+        require(resource_root.is_dir(), f"missing sample resources for index {index}")
+        resource_name = resource_root.name
+        node_lookup = read_json(resource_root / f"{resource_name}_nodelookup.json")
+        require(isinstance(node_lookup, dict), f"invalid node lookup for index {index}")
+        for task, suffix in TRAIN_GT_SUFFIXES.items():
+            ground_truth = read_json(resource_root / f"{resource_name}{suffix}")
+            require(isinstance(ground_truth, dict), f"invalid {task} GT for index {index}")
+            has_valid_pair = any(
+                node_lookup.get(source, -1) != -1
+                and any(node_lookup.get(target, -1) != -1 for target in targets)
+                for source, targets in ground_truth.items()
+            )
+            if has_valid_pair:
                 task_coverage[task] += 1
     require(all(task_coverage[task] > 0 for task in TASKS), "training sample does not cover all four tasks")
 
@@ -167,7 +209,7 @@ def validate_package(torch, data_root, check_hashes):
     coverage = ", ".join(f"{task}={task_coverage[task]}" for task in TASKS)
     print(
         f"Artifact data PASS: clean_records={len(clean_rows)}, "
-        f"train_records={len(sample_rows)} ({coverage})"
+        f"train_records={len(sample_ids)} ({coverage})"
     )
 
 
