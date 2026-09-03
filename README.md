@@ -90,6 +90,27 @@ training sample covers all four tasks: `ret`, `jumptable`, `indirectcall`, and
 
 ## 1. Setup and basic test
 
+### Optional one-time Docker access
+
+On a reviewer-controlled Linux host, a user with administrator permission may
+enable direct Docker access with:
+
+```bash
+sudo usermod -aG docker "$USER"
+```
+
+Log out and back in for the new group membership to take effect, and then
+verify access:
+
+```bash
+docker version
+```
+
+The Docker group grants root-level privileges. This permanent host change is
+not required when Docker already works directly or when the reviewer prefers
+to let the E1 wrapper use `sudo docker`. Do not change the permissions of
+`/var/run/docker.sock`.
+
 Clone the repository and extract the functional AE package:
 
 ```bash
@@ -121,16 +142,26 @@ conda env create --name icflownet-ae --file environment.yml
 conda activate icflownet-ae
 ```
 
-Run the provided host wrapper to select direct Docker or `sudo docker`, pull
-the E1 image, and check that its experiment runner is present:
+E1 must run on a reviewer-controlled x86-64 Linux host with a running Docker
+daemon. It does not require a GPU, Conda environment, or Zenodo data. If the
+current user cannot access Docker directly, authorize `sudo` in the same
+interactive shell before invoking the wrapper:
 
 ```bash
+cd "$REPO_ROOT"
+
+if ! docker version >/dev/null 2>&1; then
+  sudo -v
+fi
+
 bash "$AE_SCRIPTS/run_e1_host.sh" --check-only
 ```
 
-The wrapper uses ordinary Docker, passwordless `sudo`, or interactive `sudo`,
-in that order. If none is authorized, it prints a prerequisite error instead
-of attempting the experiment.
+The conditional command requests `sudo` authorization only when direct Docker
+access is unavailable. The password is handled by the host's `sudo` program
+and is never passed to or stored by the artifact. Noninteractive environments
+require direct Docker access or passwordless `sudo`. Keep the same shell open
+for the complete E1 experiment.
 
 Expected output:
 
@@ -170,8 +201,13 @@ E1 runs entirely in the Docker image pulled during setup. It does not use the
 host Conda environment or require a GPU. Run:
 
 ```bash
+cd "$REPO_ROOT"
 bash "$AE_SCRIPTS/run_e1_host.sh"
 ```
+
+Run this command in the same shell used for the Docker basic test so that any
+`sudo` authorization remains valid. The wrapper uses direct Docker access when
+available and otherwise uses the previously authorized `sudo` access.
 
 The published Linux/amd64 image manifest used for the artifact is pinned by
 digest `sha256:665682fd5f5e7185d3e76dcedea4b6d7406b12dca8c77f1f3dffc164136d65de`.
@@ -195,6 +231,8 @@ The runner performs five automatic stages:
 
 ```text
 E1 PASS: Zydis static GT, dynamic GT, and stripped-binary heterogeneous ACFG verified
+E1 evidence: ...
+E1 host workflow PASS
 ```
 
 Any compilation, package-test, ground-truth coverage, stripping, graph-shape,
