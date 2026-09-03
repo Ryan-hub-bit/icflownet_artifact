@@ -76,9 +76,8 @@ and `tailcall`.
 Clone the artifact branch and extract the AE package:
 
 ```bash
-git clone https://github.com/Ryan-hub-bit/icflownet.git
+git clone git@github.com:Ryan-hub-bit/icflownet_artifact.git
 cd icflownet
-git checkout ae_minimal
 
 mkdir -p /path/to/icflownet-ae
 tar -xzf /path/to/icflownet-ae.tar.gz -C /path/to/icflownet-ae
