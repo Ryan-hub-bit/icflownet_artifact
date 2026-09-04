@@ -20,7 +20,7 @@ threshold of `0.5`, and FP32 inference.
 - **Source code:**
   [Ryan-hub-bit/icflownet_artifact](https://github.com/Ryan-hub-bit/icflownet_artifact)
 - **Functional AE data and released models:**
-  [Zenodo 10.5281/zenodo.22262200](https://doi.org/10.5281/zenodo.22262200)
+  [Zenodo 10.5281/zenodo.22291756](https://doi.org/10.5281/zenodo.22291756)
   (`icflownet-ae.tar.gz`)
 - **Optional full raw-binary dataset:**
   [Zenodo 10.5281/zenodo.22261977](https://doi.org/10.5281/zenodo.22261977)
@@ -126,7 +126,7 @@ export AE_SCRIPTS="$REPO_ROOT/AE_scripts"
 mkdir -p "$REPO_ROOT/ae_data" "$OUTPUT_ROOT"
 
 wget -O icflownet-ae.tar.gz \
-  "https://zenodo.org/records/22262200/files/icflownet-ae.tar.gz?download=1"
+  "https://zenodo.org/records/22291756/files/icflownet-ae.tar.gz?download=1"
 
 tar --strip-components=1 \
   -xzf icflownet-ae.tar.gz \
